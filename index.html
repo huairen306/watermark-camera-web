@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full bg-white select-none">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>今日水印相机</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Tone.js for camera shutter sound -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Oswald:wght@500;700&display=swap');
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* iOS Camera Shutter Button Styling */
+    .shutter-outer {
+      box-shadow: 0 0 0 4px #222222;
+    }
+    .shutter-outer:active {
+      transform: scale(0.92);
+    }
+
+    .watermark-blur {
+      background: rgba(235, 240, 248, 0.72);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+<body class="h-full w-full bg-white flex flex-col justify-between overflow-hidden">
+
+  <!-- ================= TOP STATUS & APP BAR ================= -->
+  <header class="w-full bg-white z-40 px-3.5 pt-2 pb-1.5 flex items-center justify-between border-b border-gray-100">
+    <!-- Left Menu & Flash -->
+    <div class="flex items-center space-x-3.5">
+      <!-- Menu with red badge 4 -->
+      <button class="relative p-1 text-gray-800 active:opacity-60 transition-opacity">
+        <svg class="w-6 h-6 stroke-current stroke-2" viewBox="0 0 24 24" fill="none" stroke-linecap="round">
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="16" y2="12"></line>
+          <line x1="3" y1="18" x2="19" y2="18"></line>
+        </svg>
+        <span class="absolute -top-1 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center border-2 border-white">4</span>
+      </button>
+
+      <!-- Slashed Flash Icon -->
+      <button id="btnFlashToggle" class="p-1 text-gray-800 active:opacity-60 transition-opacity">
+        <svg id="flashIcon" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="2" y1="2" x2="22" y2="22"></line>
+          <path d="M10 10l-6 7h7v4l8-10.5M14 4l3-0.5-2.5 4.5"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Center '照片验真' Pill Button with Dynamic Island Dot -->
+    <div class="flex flex-col items-center">
+      <!-- Simulated screen top notch/camera dot -->
+      <div class="w-12 h-3.5 bg-black rounded-full flex items-center justify-center mb-0.5">
+        <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+      </div>
+      <!-- Verification Badge -->
+      <div class="flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/80 cursor-pointer active:scale-95 transition-transform" onclick="showToast('已开启照片真实防篡改时间与位置保护')">
+        <span class="w-3.5 h-3.5 rounded bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center">验</span>
+        <span class="text-xs font-bold text-emerald-700 tracking-tight">照片验真 &gt;</span>
+      </div>
+    </div>
+
+    <!-- Right VIP & OCR Frame -->
+    <div class="flex items-center space-x-3.5">
+      <button class="font-extrabold text-blue-600 text-sm tracking-wider hover:opacity-80 active:scale-95 transition-transform">
+        VIP
+      </button>
+      <button class="p-1 text-gray-800 active:opacity-60" title="扫描识别" onclick="showToast('智能场景识别功能已就绪')">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8V6a2 2 0 0 1 2-2h2"></path>
+          <path d="M4 16v2a2 2 0 0 0 2 2h2"></path>
+          <path d="M16 4h2a2 2 0 0 1 2 2v2"></path>
+          <path d="M16 20h2a2 2 0 0 0 2-2v-2"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= CAMERA VIEWFINDER ================= -->
+  <main class="relative flex-1 w-full overflow-hidden bg-zinc-900 flex items-center justify-center">
+    <!-- Live Camera Stream -->
+    <video id="cameraVideo" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover"></video>
+
+    <!-- Fallback Realistic Construction Site Image (shown if camera is blocked/denied) -->
+    <img id="fallbackImage" 
+         src="https://images.unsplash.com/photo-1541888946425-d0fbb186c5f7?auto=format&fit=crop&w=1200&q=80" 
+         crossorigin="anonymous" 
+         class="absolute inset-0 w-full h-full object-cover hidden" 
+         alt="Construction Site View">
+
+    <!-- Uploaded Local Photo Preview -->
+    <img id="customUploadImage" class="absolute inset-0 w-full h-full object-cover hidden z-10" alt="Upload Preview">
+
+    <!-- Composition Grid Overlay (Togglable) -->
+    <div id="gridLines" class="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3 hidden z-10">
+      <div class="border-r border-b border-white/25"></div>
+      <div class="border-r border-b border-white/25"></div>
+      <div class="border-b border-white/25"></div>
+      <div class="border-r border-b border-white/25"></div>
+      <div class="border-r border-b border-white/25"></div>
+      <div class="border-b border-white/25"></div>
+      <div class="border-r border-b border-white/25"></div>
+      <div class="border-r border-b border-white/25"></div>
+      <div></div>
+    </div>
+
+    <!-- White Flash Animation on Click -->
+    <div id="flashOverlay" class="absolute inset-0 bg-white opacity-0 pointer-events-none transition-opacity duration-150 z-30"></div>
+
+    <!-- Video recording indicator (hidden unless recording) -->
+    <div id="recordIndicator" class="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-black/60 text-white text-xs font-bold px-3 py-1.5 rounded-full hidden items-center space-x-2">
+      <span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
+      <span>录制中</span>
+      <span id="recordTimer">00:00</span>
+    </div>
+
+    <!-- Right-side Floating Controls (Zoom & Grid) -->
+    <div class="absolute right-3.5 top-1/2 -translate-y-16 z-20 flex flex-col items-center space-y-3">
+      <!-- Zoom '2' -->
+      <button class="zoom-btn w-7 h-7 rounded-full bg-black/60 text-white/90 text-xs font-semibold flex items-center justify-center backdrop-blur-md active:scale-90" data-zoom="2">2</button>
+      
+      <!-- Zoom '1x' (Active) -->
+      <button class="zoom-btn active-zoom w-8 h-8 rounded-full bg-white/90 text-black text-xs font-bold flex items-center justify-center shadow-lg active:scale-90" data-zoom="1">1x</button>
+      
+      <!-- Zoom '0.5' -->
+      <button class="zoom-btn w-7 h-7 rounded-full bg-black/60 text-white/90 text-xs font-semibold flex items-center justify-center backdrop-blur-md active:scale-90" data-zoom="0.5">广角</button>
+      
+      <!-- Grid Toggle Icon -->
+      <button id="btnToggleGrid" class="w-8 h-8 rounded-lg bg-black/50 text-white flex items-center justify-center backdrop-blur-md active:scale-90 mt-1">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="14" y="14" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Right-side GPS Target Crosshair Button (Near Bottom Watermark) -->
+    <button id="btnGpsRelocate" class="absolute right-3.5 bottom-6 z-20 w-9 h-9 rounded-full bg-black/45 backdrop-blur-md text-white/90 flex items-center justify-center shadow-md active:scale-90 transition-transform">
+      <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="7"></circle>
+        <line x1="12" y1="1" x2="12" y2="5"></line>
+        <line x1="12" y1="19" x2="12" y2="23"></line>
+        <line x1="1" y1="12" x2="5" y2="12"></line>
+        <line x1="19" y1="12" x2="23" y2="12"></line>
+      </svg>
+    </button>
+
+    <!-- ================= BOTTOM-RIGHT BRAND MARK (今日水印 - 相机 -) ================= -->
+    <div class="absolute right-3.5 bottom-4 z-20 pointer-events-none text-right flex flex-col items-center">
+      <span class="text-white text-[13px] font-extrabold tracking-wider drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.85)]">今日水印</span>
+      <span class="text-white text-[10px] font-medium tracking-widest drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.85)] -mt-0.5 opacity-90">- 相机 -</span>
+    </div>
+
+    <!-- ================= WATERMARK CARD (EXACT REPLICA: 厚丰) ================= -->
+    <div id="watermarkCard" class="absolute bottom-4 left-3.5 z-20 flex items-end cursor-pointer group" onclick="openEditDrawer()">
+      <div class="rounded-t-md rounded-b-sm overflow-hidden shadow-2xl w-[190px] border border-white/20 select-none transition-transform group-active:scale-[0.98]">
+        <!-- Blue Title Header with Golden Dot and Centered Title -->
+        <div class="text-white px-2.5 py-1 flex items-center justify-start space-x-2 relative" style="background: linear-gradient(to right, rgba(24,114,246,0.78), rgba(26,119,248,0.78), rgba(24,114,246,0.78));">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#F5B400] shadow-sm ml-0.5"></span>
+          <span id="wmTitleDisplay" class="font-extrabold text-[15px] tracking-wide text-white drop-shadow-sm flex-1 text-center pr-3">厚丰</span>
+        </div>
+
+        <!-- Frosted Glass Body -->
+        <div class="watermark-blur px-2.5 py-2 text-[12.5px] text-gray-900 leading-snug space-y-1 font-medium font-sans">
+          <div class="flex items-center space-x-1">
+            <span class="text-gray-950 font-semibold tracking-tight">施 工 区 域:</span>
+            <span id="wmAreaDisplay" class="text-gray-950 font-normal">A-68a</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <span class="text-gray-950 font-semibold tracking-tight">施工内容:</span>
+            <span id="wmContentDisplay" class="text-gray-950 font-normal">底油相</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right attached "+ 新项目" Pill Button -->
+      <button type="button" onclick="event.stopPropagation(); openEditDrawer();" class="ml-2 mb-1 px-2.5 py-1 rounded-full bg-[#1872F6] text-white text-[11px] font-bold tracking-tight shadow-md flex items-center space-x-1 active:scale-95 transition-transform hover:bg-blue-700">
+        <span>+ 新项目</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- ================= MID ACTION BAR (LOGIN / TEAM TABS) ================= -->
+  <section class="w-full bg-white px-3 pt-2.5 pb-2">
+    <div class="grid grid-cols-3 gap-2 text-sm font-semibold">
+      <!-- Left: 立即登录 > -->
+      <button class="bg-[#F0F4FA] text-blue-600 rounded-lg py-2.5 px-3 flex items-center justify-center space-x-1 active:bg-blue-100/60 transition-colors" onclick="showToast('请登录以同步工程云端相册')">
+        <span class="text-sm font-bold tracking-wide">立即登录</span>
+        <span class="text-xs">&gt;</span>
+      </button>
+
+      <!-- Middle: 从相册选图加水印（任意图片） -->
+      <button class="bg-[#F0F4FA] text-gray-900 rounded-lg py-2.5 px-3 flex items-center justify-center space-x-1.5 active:bg-gray-200 transition-colors" onclick="document.getElementById('fileUploadInput').click()">
+        <i data-lucide="image" class="w-4 h-4 text-gray-800"></i>
+        <span class="text-sm font-bold tracking-wide">相册选图</span>
+      </button>
+
+      <!-- Right: 我的团队 🔴 -->
+      <button class="bg-[#F0F4FA] text-gray-900 rounded-lg py-2.5 px-3 flex items-center justify-center space-x-1.5 active:bg-gray-200 transition-colors" onclick="showToast('已加载我的施工团队：工程一队')">
+        <i data-lucide="users" class="w-4 h-4 text-gray-800"></i>
+        <span class="text-sm font-bold tracking-wide">我的团队</span>
+        <span class="w-2 h-2 rounded-full bg-red-500 inline-block ml-0.5"></span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ================= BOTTOM CONTROLS & SHUTTER ================= -->
+  <section class="w-full bg-white px-8 pt-2 pb-1 flex items-center justify-between">
+    <!-- Left Thumbnail / Album Picker -->
+    <label class="cursor-pointer group flex flex-col items-center">
+      <div id="thumbPreviewBox" class="w-13 h-13 w-12 h-12 rounded-lg bg-gray-200 border-2 border-gray-300 overflow-hidden shadow-inner flex items-center justify-center transition-transform group-active:scale-95">
+        <img id="thumbImg" src="https://images.unsplash.com/photo-1541888946425-d0fbb186c5f7?auto=format&fit=crop&w=120&q=70" class="w-full h-full object-cover" alt="Last captured">
+      </div>
+      <input type="file" id="fileUploadInput" accept="image/*" class="hidden">
+    </label>
+
+    <!-- Center Big Shutter Button -->
+    <div class="flex items-center justify-center">
+      <button id="btnShutter" class="shutter-outer w-18 h-18 w-[72px] h-[72px] rounded-full border-[5px] border-black bg-white flex items-center justify-center transition-transform" title="拍照">
+        <!-- Inner Ring -->
+        <div class="w-14 h-14 w-[58px] h-[58px] rounded-full bg-transparent border-2 border-gray-900/10 active:bg-gray-200"></div>
+      </button>
+    </div>
+
+    <!-- Right Watermark Template Icon '印' -->
+    <button id="btnWatermarkPicker" onclick="openEditDrawer()" class="flex flex-col items-center justify-center w-12 h-12 rounded-lg border-2 border-gray-800 text-gray-900 active:scale-95 transition-transform" title="水印库">
+      <span class="font-black text-xl leading-none">印</span>
+    </button>
+  </section>
+
+  <!-- ================= BOTTOM MODE CAROUSEL ================= -->
+  <footer class="w-full bg-white pt-2 pb-3 px-2">
+    <div class="flex items-center justify-around text-gray-600 text-sm font-medium">
+      <span class="cursor-pointer hover:text-black">照片编辑</span>
+      <span id="modeVideoTab" class="cursor-pointer hover:text-black" onclick="setMode('video')">视频</span>
+      <!-- Active '照片' with indicator dot -->
+      <div id="modePhotoTab" class="flex flex-col items-center cursor-pointer" onclick="setMode('photo')">
+        <span class="text-black font-extrabold text-base">照片</span>
+        <div class="w-1 h-1 rounded-full bg-black mt-0.5"></div>
+      </div>
+      <span class="cursor-pointer hover:text-black">赚钱</span>
+      <span class="cursor-pointer text-blue-600 font-bold hover:text-blue-700">拼图汇报</span>
+    </div>
+  </footer>
+
+  <!-- ================= WATERMARK EDIT DRAWER / MODAL ================= -->
+  <div id="drawerBackdrop" class="fixed inset-0 bg-black/60 z-50 hidden opacity-0 transition-opacity duration-200" onclick="closeEditDrawer()"></div>
+  <div id="editDrawer" class="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl transform translate-y-full transition-transform duration-300 max-h-[85vh] overflow-y-auto">
+    <div class="sticky top-0 bg-white px-5 py-3 border-b border-gray-100 flex items-center justify-between z-10">
+      <div class="flex items-center space-x-2">
+        <div class="w-1 h-4 bg-blue-600 rounded-full"></div>
+        <h3 class="font-extrabold text-gray-900 text-base">编辑水印内容</h3>
+      </div>
+      <button onclick="closeEditDrawer()" class="p-1 rounded-full text-gray-400 hover:text-gray-700">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <form id="editForm" class="p-5 space-y-4" onsubmit="event.preventDefault(); saveWatermarkInfo();">
+      <!-- Project / Company Name -->
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">工程/水印标题</label>
+        <input type="text" id="inputTitle" value="厚丰" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-bold text-blue-600 focus:bg-white focus:outline-none focus:border-blue-600">
+      </div>
+
+      <!-- Area -->
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">施工区域</label>
+        <input type="text" id="inputArea" value="A-68a" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:border-blue-600">
+        <div id="areaHistory" class="flex flex-wrap items-center gap-1.5 mt-2"></div>
+      </div>
+
+      <!-- Content -->
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">施工内容</label>
+        <input type="text" id="inputContent" value="底油相" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:border-blue-600">
+        <div id="contentHistory" class="flex flex-wrap items-center gap-1.5 mt-2"></div>
+      </div>
+
+      <!-- Optional Extra Info -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">现场施工人</label>
+          <input type="text" id="inputPerson" value="李工" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:bg-white focus:outline-none focus:border-blue-600">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">当前位置 / 桩号</label>
+          <input type="text" id="inputPos" value="综合楼 3F-04" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:bg-white focus:outline-none focus:border-blue-600">
+        </div>
+      </div>
+
+      <div class="pt-3">
+        <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-500/25 transition-all">
+          完成并应用到水印
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ================= PHOTO CAPTURE RESULT POPUP MODAL ================= -->
+  <div id="photoResultModal" class="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between hidden">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 py-3 bg-black/50 backdrop-blur-md border-b border-gray-800">
+      <div class="flex items-center space-x-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span class="text-xs font-semibold text-gray-200">已合成今日真实工程水印</span>
+      </div>
+      <button id="btnCloseResult" class="p-1 text-gray-400 hover:text-white">
+        <i data-lucide="x" class="w-6 h-6"></i>
+      </button>
+    </div>
+
+    <!-- Preview Result Image -->
+    <div class="flex-1 overflow-auto flex items-center justify-center p-3">
+      <img id="renderedPhotoOutput" class="max-w-full max-h-full object-contain rounded-md shadow-2xl border border-gray-800" alt="Generated Photo">
+    </div>
+
+    <!-- Footer Action Buttons -->
+    <div class="px-5 py-4 bg-gray-900 border-t border-gray-800 flex items-center space-x-3">
+      <button id="btnRetakePhoto" class="flex-1 py-3 px-4 rounded-xl bg-gray-800 text-gray-200 font-semibold text-sm active:bg-gray-700 transition-colors flex items-center justify-center space-x-1.5">
+        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        <span>重拍</span>
+      </button>
+      <button id="btnDownloadPhoto" class="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm active:scale-98 transition-all flex items-center justify-center space-x-1.5 shadow-lg shadow-blue-600/30">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>保存照片到相册</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Off-screen high definition synthesis canvas -->
+  <canvas id="renderCanvas" class="hidden"></canvas>
+  <canvas id="videoCanvas" class="hidden"></canvas>
+
+  <script>
+    /* ====================================================================
+       APPLICATION LOGIC & STATE
+       ==================================================================== */
+    const appState = {
+      stream: null,
+      zoomLevel: 1,
+      wideApplied: false,
+      wideNoticeShown: false,
+      mode: 'photo',
+      recording: false,
+      recorder: null,
+      recordChunks: [],
+      recordRaf: 0,
+      recordTimerId: 0,
+      recordStart: 0,
+      flashOn: false,
+      gridVisible: false,
+      watermark: {
+        title: '厚丰',
+        area: 'A-68a',
+        content: '底油相',
+        person: '李工',
+        pos: '综合楼 3F-04'
+      },
+      lastCapturedUrl: null
+    };
+
+    // Shutter sound generator via Tone.js
+    let shutterSynth = null;
+    function playCameraShutterSound() {
+      try {
+        if (!shutterSynth) {
+          shutterSynth = new Tone.MembraneSynth({
+            pitchDecay: 0.04,
+            octaves: 3,
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.001, decay: 0.1, sustain: 0.01, release: 0.04 }
+          }).toDestination();
+        }
+        if (Tone.context.state !== 'running') {
+          Tone.start();
+        }
+        shutterSynth.triggerAttackRelease("D3", "32n");
+      } catch (e) {
+        console.warn('Tone.js audio not unlocked yet.');
+      }
+    }
+
+    /* ====================================================================
+       CAMERA ACCESS & FALLBACK
+       ==================================================================== */
+    const video = document.getElementById('cameraVideo');
+    const fallbackImage = document.getElementById('fallbackImage');
+    const uploadPreview = document.getElementById('customUploadImage');
+
+    // Auto-start, no tap needed: the camera is requested as soon as the
+    // page is parsed (not on window.onload, which waits for every CDN
+    // asset and font and can leave the viewfinder black for seconds).
+    // If the first attempt races WebView readiness, it retries on its
+    // own a few times; if the user denied camera access it does NOT
+    // retry in a loop -- the fallback image stays and no prompt repeats.
+    // Returning to the App (foreground) also retries, so granting the
+    // permission in Settings and coming back starts the camera by itself.
+    let cameraAttempts = 0;
+    async function startCamera() {
+      if (appState.stream) return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+        appState.stream = stream;
+        cameraAttempts = 0;
+        video.srcObject = stream;
+        video.classList.remove('hidden');
+        fallbackImage.classList.add('hidden');
+      } catch (err) {
+        console.warn("Direct camera access denied or unavailable, switching to realistic engineering fallback:", err);
+        video.classList.add('hidden');
+        fallbackImage.classList.remove('hidden');
+        const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+        if (!denied && cameraAttempts < 3) {
+          cameraAttempts += 1;
+          setTimeout(startCamera, 800 * cameraAttempts);
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && !appState.stream) startCamera();
+    });
+    window.addEventListener('focus', () => {
+      if (!appState.stream) startCamera();
+    });
+
+    /* ====================================================================
+       FLASH & GRID CONTROLS
+       ==================================================================== */
+    const btnFlash = document.getElementById('btnFlashToggle');
+    btnFlash.addEventListener('click', () => {
+      appState.flashOn = !appState.flashOn;
+      btnFlash.classList.toggle('text-amber-500', appState.flashOn);
+      btnFlash.classList.toggle('text-gray-800', !appState.flashOn);
+      showToast(appState.flashOn ? '已开启补光灯模式' : '已关闭补光灯');
+    });
+
+    const gridLines = document.getElementById('gridLines');
+    document.getElementById('btnToggleGrid').addEventListener('click', () => {
+      appState.gridVisible = !appState.gridVisible;
+      gridLines.classList.toggle('hidden', !appState.gridVisible);
+    });
+
+    /* ====================================================================
+       LENS CONTROLS: 广角 / 1x / 长焦(2x)
+       Honest limits, stated in the UI toasts as well:
+       - 2x is a real center crop, so the saved photo matches the preview.
+         The old CSS-only scale changed the preview but NOT the saved photo.
+       - 广角 tries the camera's own zoom capability first. Web pages cannot
+         force an iPhone to switch to its ultra-wide lens if the browser does
+         not expose it, so when that capability is absent the shot stays a
+         full-frame main-camera photo instead of a fake shrunken preview.
+       ==================================================================== */
+    function tryWideLens() {
+      const track = appState.stream && appState.stream.getVideoTracks()[0];
+      if (!track || !track.getCapabilities) {
+        if (!appState.wideNoticeShown) {
+          appState.wideNoticeShown = true;
+          showToast('该设备网页相机未开放超广角镜头，已用主摄全幅画面');
+        }
+        return;
+      }
+      const caps = track.getCapabilities();
+      if (caps.zoom && caps.zoom.min <= 0.5) {
+        track.applyConstraints({ advanced: [{ zoom: 0.5 }] }).then(() => {
+          appState.wideApplied = true;
+        }).catch(() => {});
+      } else if (!appState.wideNoticeShown) {
+        appState.wideNoticeShown = true;
+        showToast('该设备网页相机未开放超广角镜头，已用主摄全幅画面');
+      }
+    }
+
+    function resetWideLens() {
+      if (!appState.wideApplied) return;
+      const track = appState.stream && appState.stream.getVideoTracks()[0];
+      if (track && track.applyConstraints) {
+        track.applyConstraints({ advanced: [{ zoom: 1 }] }).catch(() => {});
+      }
+      appState.wideApplied = false;
+    }
+
+    const zoomButtons = document.querySelectorAll('.zoom-btn');
+    zoomButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        zoomButtons.forEach(b => {
+          b.className = 'zoom-btn w-7 h-7 rounded-full bg-black/60 text-white/90 text-xs font-semibold flex items-center justify-center backdrop-blur-md active:scale-90';
+        });
+        btn.className = 'zoom-btn active-zoom w-8 h-8 rounded-full bg-white/90 text-black text-xs font-bold flex items-center justify-center shadow-lg active:scale-90';
+
+        const zoom = parseFloat(btn.dataset.zoom);
+        appState.zoomLevel = zoom;
+        if (zoom < 1) {
+          tryWideLens();
+        } else {
+          resetWideLens();
+        }
+        const scaleVal = zoom === 2 ? 1.45 : 1;
+        video.style.transform = `scale(${scaleVal})`;
+        fallbackImage.style.transform = `scale(${scaleVal})`;
+        uploadPreview.style.transform = `scale(${scaleVal})`;
+        video.style.transition = 'transform 0.25s ease-out';
+        fallbackImage.style.transition = 'transform 0.25s ease-out';
+        uploadPreview.style.transition = 'transform 0.25s ease-out';
+      });
+    });
+
+    /* ====================================================================
+       GPS CROSSHAIR RE-LOCATE
+       ==================================================================== */
+    document.getElementById('btnGpsRelocate').addEventListener('click', () => {
+      if (navigator.geolocation) {
+        showToast('正在校准工程高精 GPS 经纬度...');
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            showToast(`GPS 校准成功 (±${Math.round(pos.coords.accuracy)}m)`);
+          },
+          () => {
+            showToast('GPS 定位已锁定');
+          },
+          { timeout: 5000 }
+        );
+      } else {
+        showToast('定位已锁定当前施工现场');
+      }
+    });
+
+    /* ====================================================================
+       WATERMARK DRAWER & EDITING
+       ==================================================================== */
+    const editDrawer = document.getElementById('editDrawer');
+    const drawerBackdrop = document.getElementById('drawerBackdrop');
+
+    /* ====================================================================
+       WATERMARK HISTORY (施工区域 / 施工内容)
+       Every confirmed value is kept locally in the App (localStorage,
+       most recent first, max 10 each, duplicates moved to the top).
+       Tapping a history chip fills the input -- no retyping. History
+       survives App restarts, but is lost if the App itself is deleted.
+       Seeded with values already seen on this user's own photos so the
+       first version is useful instead of empty.
+       ==================================================================== */
+    function loadHistory(key, seed) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      } catch (e) {}
+      return seed.slice();
+    }
+    let areaHistory = loadHistory('wm_history_area', ['b-10', 'A-V038', 'b-v02', 'b-7', 'b-v01', 'A-v024', 'A-68a']);
+    let contentHistory = loadHistory('wm_history_content', ['丝拿粗', '底油相']);
+
+    function pushHistory(list, value) {
+      const v = (value || '').trim();
+      if (!v) return list;
+      return [v].concat(list.filter((x) => x !== v)).slice(0, 10);
+    }
+
+    function persistHistory() {
+      try {
+        localStorage.setItem('wm_history_area', JSON.stringify(areaHistory));
+        localStorage.setItem('wm_history_content', JSON.stringify(contentHistory));
+      } catch (e) {}
+    }
+
+    function renderHistoryChips(containerId, kind, inputId) {
+      const box = document.getElementById(containerId);
+      if (!box) return;
+      box.innerHTML = '';
+      const list = kind === 'area' ? areaHistory : contentHistory;
+      if (!list.length) return;
+      const label = document.createElement('span');
+      label.className = 'text-xs text-gray-400 w-full';
+      label.innerText = '历史记录：点文字填入，点 × 删除这一条';
+      box.appendChild(label);
+      list.forEach((item) => {
+        // One chip = fill button + delete button, mirroring the original
+        // app's per-row ×. Deleting one entry never touches the others.
+        const chip = document.createElement('span');
+        chip.className = 'inline-flex items-center rounded-full bg-gray-100 overflow-hidden';
+        const fill = document.createElement('button');
+        fill.type = 'button';
+        fill.className = 'px-2.5 py-1 text-gray-800 text-xs font-medium active:bg-blue-100 active:text-blue-700 transition-colors';
+        fill.innerText = item;
+        fill.addEventListener('click', () => {
+          document.getElementById(inputId).value = item;
+        });
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'px-1.5 py-1 text-gray-400 text-xs font-bold active:text-red-500';
+        del.innerText = '×';
+        del.setAttribute('aria-label', '删除' + item);
+        del.addEventListener('click', () => {
+          if (kind === 'area') {
+            areaHistory = areaHistory.filter((x) => x !== item);
+          } else {
+            contentHistory = contentHistory.filter((x) => x !== item);
+          }
+          persistHistory();
+          renderHistory();
+          showToast('已删除：' + item);
+        });
+        chip.appendChild(fill);
+        chip.appendChild(del);
+        box.appendChild(chip);
+      });
+      // Clear-all for this field only. Values can be re-added by
+      // confirming them again later, so no confirmation dialog is needed.
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'px-2.5 py-1 rounded-full text-red-500 text-xs font-medium active:bg-red-50 transition-colors';
+      clear.innerText = '清空';
+      clear.addEventListener('click', () => {
+        if (kind === 'area') {
+          areaHistory = [];
+        } else {
+          contentHistory = [];
+        }
+        persistHistory();
+        renderHistory();
+        showToast('历史记录已清空');
+      });
+      box.appendChild(clear);
+    }
+
+    function renderHistory() {
+      renderHistoryChips('areaHistory', 'area', 'inputArea');
+      renderHistoryChips('contentHistory', 'content', 'inputContent');
+    }
+
+    function openEditDrawer() {
+      document.getElementById('inputTitle').value = appState.watermark.title;
+      document.getElementById('inputArea').value = appState.watermark.area;
+      document.getElementById('inputContent').value = appState.watermark.content;
+      document.getElementById('inputPerson').value = appState.watermark.person;
+      document.getElementById('inputPos').value = appState.watermark.pos;
+      renderHistory();
+
+      drawerBackdrop.classList.remove('hidden');
+      setTimeout(() => {
+        drawerBackdrop.classList.remove('opacity-0');
+        editDrawer.classList.remove('translate-y-full');
+      }, 10);
+    }
+
+    function closeEditDrawer() {
+      editDrawer.classList.add('translate-y-full');
+      drawerBackdrop.classList.add('opacity-0');
+      setTimeout(() => {
+        drawerBackdrop.classList.add('hidden');
+      }, 250);
+    }
+
+    function saveWatermarkInfo() {
+      appState.watermark.title = document.getElementById('inputTitle').value.trim() || '厚丰';
+      appState.watermark.area = document.getElementById('inputArea').value.trim() || 'A-68a';
+      appState.watermark.content = document.getElementById('inputContent').value.trim() || '底油相';
+      appState.watermark.person = document.getElementById('inputPerson').value.trim() || '李工';
+      appState.watermark.pos = document.getElementById('inputPos').value.trim() || '综合楼 3F-04';
+
+      // Update UI displays
+      document.getElementById('wmTitleDisplay').innerText = appState.watermark.title;
+      document.getElementById('wmAreaDisplay').innerText = appState.watermark.area;
+      document.getElementById('wmContentDisplay').innerText = appState.watermark.content;
+
+      // Remember confirmed values for next time's history chips.
+      areaHistory = pushHistory(areaHistory, appState.watermark.area);
+      contentHistory = pushHistory(contentHistory, appState.watermark.content);
+      persistHistory();
+      renderHistory();
+
+      closeEditDrawer();
+      showToast('水印信息已更新');
+    }
+
+    /* ====================================================================
+       LOCAL PHOTO FILE UPLOAD
+       ==================================================================== */
+    const fileUploadInput = document.getElementById('fileUploadInput');
+    // Allow picking the same file twice in a row (otherwise no change event fires).
+    fileUploadInput.addEventListener('click', (e) => { e.target.value = ''; });
+    fileUploadInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        uploadPreview.classList.remove('hidden');
+        video.classList.add('hidden');
+        fallbackImage.classList.add('hidden');
+        document.getElementById('thumbImg').src = event.target.result;
+        // Wait for the image to actually decode before stamping: the old
+        // 150 ms guess could render before a large album photo was ready,
+        // producing a blank or half-drawn result. onload fires only when
+        // the image is ready, whatever its size or source.
+        uploadPreview.onload = () => { takePhotoAndRender(); };
+        uploadPreview.onerror = () => { showToast('图片读取失败，请换一张试试'); };
+        uploadPreview.src = event.target.result;
+      };
+      reader.onerror = () => { showToast('图片读取失败，请换一张试试'); };
+      reader.readAsDataURL(file);
+    });
+
+    /* ====================================================================
+       CANVAS HIGH-RES PHOTO CAPTURE & WATERMARK RENDERING
+       ==================================================================== */
+    const renderCanvas = document.getElementById('renderCanvas');
+    const photoResultModal = document.getElementById('photoResultModal');
+    const renderedPhotoOutput = document.getElementById('renderedPhotoOutput');
+    const flashOverlay = document.getElementById('flashOverlay');
+
+    function triggerFlash() {
+      flashOverlay.style.opacity = '1';
+      setTimeout(() => {
+        flashOverlay.style.opacity = '0';
+      }, 120);
+    }
+
+    // Shared by photo capture and video recording: draws the
+    // semi-transparent watermark card + brand stamp onto ctx.
+    function drawWatermarkCard(ctx, targetWidth, targetHeight) {
+      // 2. Render Exact "厚丰" Engineering Watermark Card on Canvas (Bottom-Left)
+      const scale = targetWidth / 420; // responsive scale matching mobile ratio
+      const cardX = 14 * scale;
+      const cardY = targetHeight - (98 * scale);
+      const cardW = 186 * scale;
+      const cardH = 68 * scale;
+      const headerH = 22 * scale;
+      const radius = 5 * scale;
+
+      ctx.save();
+
+      // Card drop shadow
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+      ctx.shadowBlur = 8 * scale;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 3 * scale;
+
+      // Draw Card Header (semi-transparent blue, matching the reference photo)
+      ctx.beginPath();
+      ctx.moveTo(cardX + radius, cardY);
+      ctx.lineTo(cardX + cardW - radius, cardY);
+      ctx.quadraticCurveTo(cardX + cardW, cardY, cardX + cardW, cardY + radius);
+      ctx.lineTo(cardX + cardW, cardY + headerH);
+      ctx.lineTo(cardX, cardY + headerH);
+      ctx.lineTo(cardX, cardY + radius);
+      ctx.quadraticCurveTo(cardX, cardY, cardX + radius, cardY);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(24, 114, 246, 0.78)';
+      ctx.fill();
+
+      // Header Golden Status Dot
+      ctx.beginPath();
+      ctx.arc(cardX + (12 * scale), cardY + (headerH / 2), 3.2 * scale, 0, Math.PI * 2);
+      ctx.fillStyle = '#F5B400';
+      ctx.fill();
+
+      // Header Title Text "厚丰"
+      ctx.shadowColor = 'transparent';
+      ctx.font = `bold ${13 * scale}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(appState.watermark.title, cardX + (cardW / 2), cardY + (headerH / 2));
+
+      // Draw Card Body (Frosted light background matching the photo)
+      const bodyY = cardY + headerH;
+      const bodyH = cardH - headerH;
+
+      ctx.beginPath();
+      ctx.moveTo(cardX, bodyY);
+      ctx.lineTo(cardX + cardW, bodyY);
+      ctx.lineTo(cardX + cardW, bodyY + bodyH - radius);
+      ctx.quadraticCurveTo(cardX + cardW, bodyY + bodyH, cardX + cardW - radius, bodyY + bodyH);
+      ctx.lineTo(cardX + radius, bodyY + bodyH);
+      ctx.quadraticCurveTo(cardX, bodyY + bodyH, cardX, bodyY + bodyH - radius);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(235, 240, 248, 0.72)';
+      ctx.fill();
+
+      // Card Content Lines
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      const textLeft = cardX + (8 * scale);
+
+      // Line 1: 施 工 区 域: A-68a
+      ctx.font = `bold ${10.5 * scale}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif`;
+      ctx.fillStyle = '#111827';
+      ctx.fillText('施 工 区 域:', textLeft, bodyY + (13 * scale));
+      const labelW1 = ctx.measureText('施 工 区 域:').width;
+      ctx.font = `500 ${10.5 * scale}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif`;
+      ctx.fillText(` ${appState.watermark.area}`, textLeft + labelW1, bodyY + (13 * scale));
+
+      // Line 2: 施工内容: 底油相
+      ctx.font = `bold ${10.5 * scale}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif`;
+      ctx.fillText('施工内容:', textLeft, bodyY + (30 * scale));
+      const labelW2 = ctx.measureText('施工内容:').width;
+      ctx.font = `500 ${10.5 * scale}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif`;
+      ctx.fillText(` ${appState.watermark.content}`, textLeft + labelW2, bodyY + (30 * scale));
+
+      // 3. Render Bottom-Right Brand Stamp: "今日水印 \n - 相机 -"
+      const brX = targetWidth - (16 * scale);
+      const brY = targetHeight - (20 * scale);
+
+      ctx.textAlign = 'right';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.shadowBlur = 4 * scale;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 1.5 * scale;
+
+      // Line 1: 今日水印
+      ctx.font = `bold ${13 * scale}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif`;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.fillText('今日水印', brX, brY - (13 * scale));
+
+      // Line 2: - 相机 -
+      ctx.font = `500 ${10 * scale}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif`;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.fillText('- 相机 -', brX - (2 * scale), brY);
+
+      ctx.restore();
+    }
+
+    async function takePhotoAndRender() {
+      playCameraShutterSound();
+      triggerFlash();
+
+      const ctx = renderCanvas.getContext('2d');
+
+      // Determine active image source
+      let sourceEl = fallbackImage;
+      if (!uploadPreview.classList.contains('hidden') && uploadPreview.src) {
+        sourceEl = uploadPreview;
+      } else if (!video.classList.contains('hidden') && video.videoWidth) {
+        sourceEl = video;
+      }
+
+      // Resolution setup
+      const targetWidth = sourceEl.videoWidth || sourceEl.naturalWidth || 1440;
+      const targetHeight = sourceEl.videoHeight || sourceEl.naturalHeight || 1920;
+
+      renderCanvas.width = targetWidth;
+      renderCanvas.height = targetHeight;
+
+      // 1. Draw base photo. Zoom is a real center crop, so the saved photo
+      // matches the preview; the old CSS-only scale changed the preview
+      // but left the saved photo unzoomed.
+      let sx = 0, sy = 0, sw = targetWidth, sh = targetHeight;
+      if (appState.zoomLevel > 1) {
+        sw = targetWidth / appState.zoomLevel;
+        sh = targetHeight / appState.zoomLevel;
+        sx = (targetWidth - sw) / 2;
+        sy = (targetHeight - sh) / 2;
+      }
+      ctx.drawImage(sourceEl, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
+
+      drawWatermarkCard(ctx, targetWidth, targetHeight);
+
+      // 4. Export and save directly in the App; preview only as a browser fallback.
+      // In the App, the photo goes straight to the system album with no
+      // save screen in between. The native side shows the real success or
+      // failure toast. Only the browser fallback (no native bridge) still
+      // opens the preview modal with its save button.
+      const dataUrl = renderCanvas.toDataURL('image/jpeg', 0.95);
+      appState.lastCapturedUrl = dataUrl;
+      renderedPhotoOutput.src = dataUrl;
+      document.getElementById('thumbImg').src = dataUrl;
+
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.savePhoto) {
+        window.webkit.messageHandlers.savePhoto.postMessage(dataUrl);
+        // Back to the camera view, ready for the next shot. If the source
+        // was an album photo, drop it so the live camera is visible again.
+        if (!uploadPreview.classList.contains('hidden')) {
+          uploadPreview.classList.add('hidden');
+          if (appState.stream) {
+            video.classList.remove('hidden');
+          } else {
+            fallbackImage.classList.remove('hidden');
+          }
+        }
+      } else {
+        photoResultModal.classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('btnShutter').addEventListener('click', () => {
+      if (appState.mode === 'video') {
+        toggleRecording();
+      } else {
+        takePhotoAndRender();
+      }
+    });
+
+    /* ====================================================================
+       VIDEO RECORDING (watermark baked into every frame)
+       How it works: each animation frame draws the live camera frame plus
+       the same semi-transparent watermark card onto videoCanvas, and
+       MediaRecorder records that canvas stream -- so the saved video
+       carries the watermark, unlike recording the raw camera stream.
+       Honest limits:
+       - No sound in this version: the camera stream is video-only
+         (audio: false), so the clip is silent. Sound needs a microphone
+         permission round and is a separate change if wanted.
+       - If this WebView does not support MediaRecorder / canvas
+         captureStream, recording refuses with a toast instead of
+         silently producing nothing.
+       - Long clips become large base64 payloads for the native save
+         bridge; keep clips short for reliable saving.
+       ==================================================================== */
+    const videoCanvas = document.getElementById('videoCanvas');
+    const recordIndicator = document.getElementById('recordIndicator');
+    const recordTimerEl = document.getElementById('recordTimer');
+
+    function setMode(mode) {
+      if (appState.recording) {
+        showToast('正在录制，先点快门停止');
+        return;
+      }
+      appState.mode = mode;
+      const videoTab = document.getElementById('modeVideoTab');
+      const photoTab = document.getElementById('modePhotoTab');
+      const active = 'text-black font-extrabold text-base';
+      if (mode === 'video') {
+        videoTab.className = 'cursor-pointer ' + active;
+        photoTab.querySelector('span').className = 'text-gray-600 text-sm font-medium';
+      } else {
+        videoTab.className = 'cursor-pointer hover:text-black';
+        photoTab.querySelector('span').className = active;
+      }
+      showToast(mode === 'video' ? '视频模式：点快门开始录制，再点一次停止并保存' : '照片模式');
+    }
+
+    function drawVideoFrame() {
+      if (!appState.recording) return;
+      const ctx = videoCanvas.getContext('2d');
+      const w = videoCanvas.width, h = videoCanvas.height;
+      let sx = 0, sy = 0, sw = w, sh = h;
+      if (appState.zoomLevel > 1) {
+        sw = w / appState.zoomLevel;
+        sh = h / appState.zoomLevel;
+        sx = (w - sw) / 2;
+        sy = (h - sh) / 2;
+      }
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+      drawWatermarkCard(ctx, w, h);
+      appState.recordRaf = requestAnimationFrame(drawVideoFrame);
+    }
+
+    function pickRecorderMime() {
+      const candidates = ['video/mp4', 'video/mp4;codecs=avc1', 'video/webm'];
+      for (const m of candidates) {
+        try {
+          if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) return m;
+        } catch (e) {}
+      }
+      return '';
+    }
+
+    function toggleRecording() {
+      if (appState.recording) {
+        // Stop: the recorder's onstop handler saves the clip.
+        appState.recording = false;
+        cancelAnimationFrame(appState.recordRaf);
+        clearInterval(appState.recordTimerId);
+        recordIndicator.classList.add('hidden');
+        recordIndicator.classList.remove('flex');
+        if (appState.recorder && appState.recorder.state !== 'inactive') {
+          appState.recorder.stop();
+        }
+        return;
+      }
+      if (typeof MediaRecorder === 'undefined' || !videoCanvas.captureStream) {
+        showToast('当前系统不支持网页录像');
+        return;
+      }
+      if (video.classList.contains('hidden') || !video.videoWidth) {
+        showToast('请先允许相机，视频只能录实时画面');
+        return;
+      }
+      const mimeType = pickRecorderMime();
+      if (!mimeType) {
+        showToast('当前系统不支持网页录像');
+        return;
+      }
+      videoCanvas.width = video.videoWidth;
+      videoCanvas.height = video.videoHeight;
+      appState.recordChunks = [];
+      appState.recording = true;
+      appState.recordStart = Date.now();
+      recordIndicator.classList.remove('hidden');
+      recordIndicator.classList.add('flex');
+      appState.recordTimerId = setInterval(() => {
+        const s = Math.floor((Date.now() - appState.recordStart) / 1000);
+        recordTimerEl.innerText = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+      }, 500);
+      drawVideoFrame();
+      const stream = videoCanvas.captureStream(30);
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8000000 });
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) appState.recordChunks.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(appState.recordChunks, { type: mimeType });
+        appState.recordChunks = [];
+        if (!blob.size) {
+          showToast('录制失败：没有录到画面');
+          return;
+        }
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.saveVideo) {
+          showToast('正在保存视频…');
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            window.webkit.messageHandlers.saveVideo.postMessage(ev.target.result);
+          };
+          reader.readAsDataURL(blob);
+        } else {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = '今日水印相机视频.' + (mimeType.includes('mp4') ? 'mp4' : 'webm');
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          showToast('视频已下载（浏览器内保存）');
+        }
+      };
+      recorder.start();
+      appState.recorder = recorder;
+    }
+
+    /* ====================================================================
+       RESULT MODAL ACTIONS
+       ==================================================================== */
+    document.getElementById('btnCloseResult').addEventListener('click', () => {
+      photoResultModal.classList.add('hidden');
+    });
+
+    document.getElementById('btnRetakePhoto').addEventListener('click', () => {
+      photoResultModal.classList.add('hidden');
+      if (!uploadPreview.classList.contains('hidden')) {
+        uploadPreview.classList.add('hidden');
+        if (appState.stream) {
+          video.classList.remove('hidden');
+        } else {
+          fallbackImage.classList.remove('hidden');
+        }
+      }
+    });
+
+    document.getElementById('btnDownloadPhoto').addEventListener('click', () => {
+      if (!appState.lastCapturedUrl) return;
+      // In the packaged App, hand the image to native code: only a native
+      // Photos write actually lands in the system album. A web <a download>
+      // click inside WKWebView does nothing, which is why the old version
+      // showed "saved" without saving anything. The native side shows the
+      // real success/failure toast, so nothing is shown here in that case.
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.savePhoto) {
+        window.webkit.messageHandlers.savePhoto.postMessage(appState.lastCapturedUrl);
+        return;
+      }
+      const link = document.createElement('a');
+      const timeTag = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+      link.download = `今日水印相机_${appState.watermark.title}_${timeTag}.jpg`;
+      link.href = appState.lastCapturedUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast('照片已下载');
+    });
+
+    /* ====================================================================
+       IN-APP TOAST (Non-intrusive alert replacement)
+       ==================================================================== */
+    function showToast(text) {
+      const old = document.getElementById('sysToast');
+      if (old) old.remove();
+
+      const toast = document.createElement('div');
+      toast.id = 'sysToast';
+      toast.className = 'fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-black/85 text-white text-xs px-4 py-2 rounded-full shadow-2xl backdrop-blur-md transition-all flex items-center space-x-1.5 border border-white/10';
+      toast.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>${text}</span>`;
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 250);
+      }, 2400);
+    }
+
+    /* ====================================================================
+       BOOTSTRAP INITIALIZATION
+       Start the camera immediately (DOM is already parsed -- this script
+       sits at the end of <body>), instead of waiting for window.onload
+       and every CDN asset. Icons are still created on load if needed.
+       ==================================================================== */
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+    startCamera();
+    window.addEventListener('load', () => {
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+    });
+  </script>
+</body>
+</html>
