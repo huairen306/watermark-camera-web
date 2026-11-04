@@ -168,7 +168,7 @@
     <div id="watermarkCard" class="absolute bottom-4 left-3.5 z-20 flex items-end cursor-pointer group" onclick="openEditDrawer()">
       <div class="rounded-t-md rounded-b-sm overflow-hidden shadow-2xl w-[190px] border border-white/20 select-none transition-transform group-active:scale-[0.98]">
         <!-- Blue Title Header with Golden Dot and Centered Title -->
-        <div class="text-white px-2.5 py-1 flex items-center justify-start space-x-2 relative" style="background: rgba(24, 114, 246, 0.85);">
+        <div class="text-white px-2.5 py-1 flex items-center justify-start space-x-2 relative" style="background: rgba(24, 114, 246, 0.65);">
           <span class="w-2.5 h-2.5 rounded-full bg-[#F5B400] shadow-sm ml-0.5"></span>
           <span id="wmTitleDisplay" class="font-extrabold text-[15px] tracking-wide text-white drop-shadow-sm flex-1 text-center pr-3">厚丰</span>
         </div>
@@ -740,7 +740,7 @@
       ctx.lineTo(cardX, cardY + radius);
       ctx.quadraticCurveTo(cardX, cardY, cardX + radius, cardY);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(24, 114, 246, 0.85)';
+      ctx.fillStyle = 'rgba(24, 114, 246, 0.65)';
       ctx.fill();
 
       // Header Golden Status Dot
