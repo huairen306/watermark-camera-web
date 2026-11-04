@@ -411,7 +411,25 @@
     // old guard `if (appState.stream) return` made that permanent,
     // because the foreground retry refused to start a new stream.
     function isStreamLive() {
-      return !!(appState.stream && appState.stream.getVideoTracks().some((t) => t.readyState === 'live'));
+      // A muted track delivers no frames (black viewfinder) even though
+      // readyState is still 'live' -- e.g. after a phone call or another
+      // app briefly took the camera. Treat muted as dead, not live.
+      return !!(appState.stream && appState.stream.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted));
+    }
+    let cameraDenied = false;
+    let watchdogAttempts = 0;
+    // Watchdog: a stream can be 'live' on paper yet deliver no frames
+    // (black viewfinder). A couple of seconds after starting, and on
+    // every foreground return, verify frames are actually arriving;
+    // if not, restart once or twice instead of leaving a black screen.
+    // Permission-denied is never retried, so this cannot loop prompts.
+    function checkCameraHealth() {
+      if (cameraDenied || document.visibilityState !== 'visible' || appState.recording) return;
+      const noFrames = !isStreamLive() || video.paused || video.videoWidth === 0;
+      if (noFrames && watchdogAttempts < 2) {
+        watchdogAttempts += 1;
+        startCamera();
+      }
     }
     function stopOldStream() {
       if (appState.stream) {
@@ -438,10 +456,13 @@
         });
         appState.stream = stream;
         cameraAttempts = 0;
+        cameraDenied = false;
         video.srcObject = stream;
         video.classList.remove('hidden');
         fallbackImage.classList.add('hidden');
         try { await video.play(); } catch (e) {}
+        watchdogAttempts = 0;
+        setTimeout(checkCameraHealth, 2000);
         // If the system later kills a track (e.g. another background
         // trip), restart on the next foreground return instead of
         // leaving a frozen frame on screen.
@@ -455,6 +476,7 @@
         video.classList.add('hidden');
         fallbackImage.classList.remove('hidden');
         const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+        if (denied) cameraDenied = true;
         if (!denied && cameraAttempts < 3) {
           cameraAttempts += 1;
           setTimeout(startCamera, 800 * cameraAttempts);
@@ -462,11 +484,12 @@
       }
     }
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') startCamera();
+      if (document.visibilityState === 'visible') { startCamera(); setTimeout(checkCameraHealth, 800); }
     });
     window.addEventListener('focus', () => {
-      startCamera();
+      startCamera(); setTimeout(checkCameraHealth, 800);
     });
+    video.addEventListener('playing', () => { watchdogAttempts = 0; });
 
     /* ====================================================================
        FLASH & GRID CONTROLS
