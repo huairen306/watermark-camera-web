@@ -746,7 +746,12 @@
       // 2. Render Exact "厚丰" Engineering Watermark Card on Canvas (Bottom-Left)
       const scale = targetWidth / 420; // responsive scale matching mobile ratio
       const cardX = 14 * scale;
-      const cardY = targetHeight - (98 * scale);
+      // Card bottom margin is only 10*scale (was 30*scale): the old value
+      // left the card floating ~5% of the photo height above the bottom
+      // edge, while the original app sits it almost flush to the bottom
+      // (~2% margin). Card height is 68*scale, so cardY must be
+      // targetHeight - (68 + 10) * scale.
+      const cardY = targetHeight - (78 * scale);
       const cardW = 186 * scale;
       const cardH = 68 * scale;
       const headerH = 22 * scale;
