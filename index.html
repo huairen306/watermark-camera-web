@@ -158,17 +158,6 @@
       </button>
     </div>
 
-    <!-- Right-side GPS Target Crosshair Button (Near Bottom Watermark) -->
-    <button id="btnGpsRelocate" class="absolute right-3.5 bottom-6 z-20 w-9 h-9 rounded-full bg-black/45 backdrop-blur-md text-white/90 flex items-center justify-center shadow-md active:scale-90 transition-transform">
-      <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="7"></circle>
-        <line x1="12" y1="1" x2="12" y2="5"></line>
-        <line x1="12" y1="19" x2="12" y2="23"></line>
-        <line x1="1" y1="12" x2="5" y2="12"></line>
-        <line x1="19" y1="12" x2="23" y2="12"></line>
-      </svg>
-    </button>
-
     <!-- ================= BOTTOM-RIGHT BRAND MARK (今日水印 - 相机 -) ================= -->
     <div class="absolute right-3.5 bottom-4 z-20 pointer-events-none text-right flex flex-col items-center">
       <span class="text-white text-[13px] font-extrabold tracking-wider drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.85)]">今日水印</span>
@@ -196,12 +185,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Right attached "+ 新项目" Pill Button -->
-      <button type="button" onclick="event.stopPropagation(); openEditDrawer();" class="ml-2 mb-1 px-2.5 py-1 rounded-full bg-[#1872F6] text-white text-[11px] font-bold tracking-tight shadow-md flex items-center space-x-1 active:scale-95 transition-transform hover:bg-blue-700">
-        <span>+ 新项目</span>
-      </button>
-    </div>
   </main>
 
   <!-- ================= MID ACTION BAR (LOGIN / TEAM TABS) ================= -->
@@ -534,26 +517,6 @@
         fallbackImage.style.transition = 'transform 0.25s ease-out';
         uploadPreview.style.transition = 'transform 0.25s ease-out';
       });
-    });
-
-    /* ====================================================================
-       GPS CROSSHAIR RE-LOCATE
-       ==================================================================== */
-    document.getElementById('btnGpsRelocate').addEventListener('click', () => {
-      if (navigator.geolocation) {
-        showToast('正在校准工程高精 GPS 经纬度...');
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            showToast(`GPS 校准成功 (±${Math.round(pos.coords.accuracy)}m)`);
-          },
-          () => {
-            showToast('GPS 定位已锁定');
-          },
-          { timeout: 5000 }
-        );
-      } else {
-        showToast('定位已锁定当前施工现场');
-      }
     });
 
     /* ====================================================================
