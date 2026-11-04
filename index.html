@@ -597,6 +597,34 @@
     let areaHistory = loadHistory('wm_history_area', ['b-10', 'A-V038', 'b-v02', 'b-7', 'b-v01', 'A-v024', 'A-68a']);
     let contentHistory = loadHistory('wm_history_content', ['丝拿粗', '底油相']);
 
+    // Last-used persistence: on launch, resume the most recently
+    // confirmed area/content instead of resetting to the hardcoded
+    // defaults (A-68a / 底油相) on every entry. Only a genuinely stored
+    // history counts -- the seed list on first launch does not override
+    // the defaults. The drawer inputs are filled from appState when the
+    // drawer opens, so updating appState + the preview displays here is
+    // enough; confirming new values in the drawer updates history, and
+    // the next launch resumes those.
+    function loadStoredHistory(key) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      } catch (e) {}
+      return null;
+    }
+    const storedArea = loadStoredHistory('wm_history_area');
+    const storedContent = loadStoredHistory('wm_history_content');
+    if (storedArea) {
+      appState.watermark.area = storedArea[0];
+      const areaEl = document.getElementById('wmAreaDisplay');
+      if (areaEl) areaEl.innerText = storedArea[0];
+    }
+    if (storedContent) {
+      appState.watermark.content = storedContent[0];
+      const contentEl = document.getElementById('wmContentDisplay');
+      if (contentEl) contentEl.innerText = storedContent[0];
+    }
+
     function pushHistory(list, value) {
       const v = (value || '').trim();
       if (!v) return list;
