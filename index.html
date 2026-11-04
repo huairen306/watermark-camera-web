@@ -404,8 +404,29 @@
     // Returning to the App (foreground) also retries, so granting the
     // permission in Settings and coming back starts the camera by itself.
     let cameraAttempts = 0;
+    // A stream object can outlive its tracks: iOS stops camera tracks
+    // when the App goes to the background, so after returning the old
+    // stream object is still set but every track is 'ended' -- the
+    // viewfinder then shows a frozen frame instead of live video. The
+    // old guard `if (appState.stream) return` made that permanent,
+    // because the foreground retry refused to start a new stream.
+    function isStreamLive() {
+      return !!(appState.stream && appState.stream.getVideoTracks().some((t) => t.readyState === 'live'));
+    }
+    function stopOldStream() {
+      if (appState.stream) {
+        appState.stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
+        appState.stream = null;
+      }
+    }
     async function startCamera() {
-      if (appState.stream) return;
+      if (isStreamLive()) {
+        // Stream is alive but the element may have paused while in the
+        // background -- resume playback so the viewfinder moves again.
+        try { await video.play(); } catch (e) {}
+        return;
+      }
+      stopOldStream();
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -420,6 +441,15 @@
         video.srcObject = stream;
         video.classList.remove('hidden');
         fallbackImage.classList.add('hidden');
+        try { await video.play(); } catch (e) {}
+        // If the system later kills a track (e.g. another background
+        // trip), restart on the next foreground return instead of
+        // leaving a frozen frame on screen.
+        stream.getVideoTracks().forEach((t) => {
+          t.addEventListener('ended', () => {
+            if (appState.stream === stream) appState.stream = null;
+          });
+        });
       } catch (err) {
         console.warn("Direct camera access denied or unavailable, switching to realistic engineering fallback:", err);
         video.classList.add('hidden');
@@ -432,10 +462,10 @@
       }
     }
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && !appState.stream) startCamera();
+      if (document.visibilityState === 'visible') startCamera();
     });
     window.addEventListener('focus', () => {
-      if (!appState.stream) startCamera();
+      startCamera();
     });
 
     /* ====================================================================
@@ -907,10 +937,15 @@
       if (!uploadPreview.classList.contains('hidden')) {
         uploadPreview.classList.add('hidden');
         uploadPreview.removeAttribute('src');
-        if (appState.stream) {
+        if (isStreamLive()) {
           video.classList.remove('hidden');
         } else {
-          fallbackImage.classList.remove('hidden');
+          // No live stream (e.g. it died while in the background):
+          // show the video element and restart it instead of leaving
+          // a frozen frame or the fallback image on screen.
+          video.classList.remove('hidden');
+          fallbackImage.classList.add('hidden');
+          startCamera();
         }
       }
     }
