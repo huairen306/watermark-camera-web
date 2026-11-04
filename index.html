@@ -864,14 +864,7 @@
         window.webkit.messageHandlers.savePhoto.postMessage(dataUrl);
         // Back to the camera view, ready for the next shot. If the source
         // was an album photo, drop it so the live camera is visible again.
-        if (!uploadPreview.classList.contains('hidden')) {
-          uploadPreview.classList.add('hidden');
-          if (appState.stream) {
-            video.classList.remove('hidden');
-          } else {
-            fallbackImage.classList.remove('hidden');
-          }
-        }
+        returnToCamera();
       } else {
         photoResultModal.classList.remove('hidden');
       }
@@ -905,11 +898,29 @@
     const recordIndicator = document.getElementById('recordIndicator');
     const recordTimerEl = document.getElementById('recordTimer');
 
+    // Back to the live camera after an album photo: hide the picked
+    // image and show the camera stream again (or the fallback if the
+    // camera is unavailable). Without this, the picked photo stays on
+    // screen and every later "photo" just re-stamps that same image --
+    // the user can never get back to the camera.
+    function returnToCamera() {
+      if (!uploadPreview.classList.contains('hidden')) {
+        uploadPreview.classList.add('hidden');
+        uploadPreview.removeAttribute('src');
+        if (appState.stream) {
+          video.classList.remove('hidden');
+        } else {
+          fallbackImage.classList.remove('hidden');
+        }
+      }
+    }
+
     function setMode(mode) {
       if (appState.recording) {
         showToast('正在录制，先点快门停止');
         return;
       }
+      returnToCamera();
       appState.mode = mode;
       const videoTab = document.getElementById('modeVideoTab');
       const photoTab = document.getElementById('modePhotoTab');
@@ -1027,18 +1038,12 @@
        ==================================================================== */
     document.getElementById('btnCloseResult').addEventListener('click', () => {
       photoResultModal.classList.add('hidden');
+      returnToCamera();
     });
 
     document.getElementById('btnRetakePhoto').addEventListener('click', () => {
       photoResultModal.classList.add('hidden');
-      if (!uploadPreview.classList.contains('hidden')) {
-        uploadPreview.classList.add('hidden');
-        if (appState.stream) {
-          video.classList.remove('hidden');
-        } else {
-          fallbackImage.classList.remove('hidden');
-        }
-      }
+      returnToCamera();
     });
 
     document.getElementById('btnDownloadPhoto').addEventListener('click', () => {
@@ -1061,6 +1066,8 @@
       document.body.removeChild(link);
 
       showToast('照片已下载');
+      photoResultModal.classList.add('hidden');
+      returnToCamera();
     });
 
     /* ====================================================================
